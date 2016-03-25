@@ -1,0 +1,584 @@
+package com.cnp.DashBoardBO;
+
+import java.io.IOException;
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Calendar;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
+import org.apache.log4j.Logger;
+
+import com.cnp.DashBoardDAO.DashBoardServiceUtility;
+import com.cnp.datamodels.AppStatus;
+import com.cnp.datamodels.ApplicationMonitorLog;
+import com.cnp.datamodels.ApplicationNotificationLog;
+import com.cnp.datamodels.SampleData;
+import com.cnp.datamodels.Sampleversion;
+import com.cnp.datamodels.TableDetails;
+import com.cnp.datamodels.TableModel;
+import com.cnp.datamodels.TriggerLogModel;
+import com.cnp.datamodels.UserRoles;
+import com.cnp.datamodels.ValidBrands;
+import com.cnp.datamodels.ValidTriggerTypes;
+import com.fasterxml.jackson.core.JsonParseException;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonMappingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.JsonNodeFactory;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.staples.gnp.common.Json;
+import com.staples.gnp.configuration.Config;
+import com.staples.gnp.domain.DataService;
+import com.staples.gnp.domain.DataSourceType;
+import com.staples.gnp.domain.DispatcherErrors;
+import com.staples.gnp.domain.Filter;
+import com.staples.gnp.domain.Parameter;
+import com.staples.gnp.domain.SampleSet;
+import com.staples.gnp.domain.TemplateInfo;
+import com.staples.gnp.log4j.LoggingManager;
+import com.staples.gnp.services.IServiceCallback;
+import com.staples.gnp.services.WebService;
+import com.staples.gnpgatekeeper.operations.AppStatusThread;
+
+public class DatabaseMonitoringServices {
+	static Logger logger = LoggingManager.getAppLogger(DatabaseMonitoringServices.class.getName());
+	public static HashMap<String, String> validTypes = null;
+	public static String finalJson="";
+	
+	public static Map<Integer, String> getAllTables() {
+	
+		DashBoardServiceUtility.getAllTables();
+		Map<Integer, String> tableMap = new HashMap<Integer, String>();
+		String[] tables=Config.Current().DashBoard.DataBaseMonitoring.AllTables;
+		for(int i=0;i<tables.length;i++){
+			tableMap.put(i, tables[i]);
+		}
+		return tableMap;
+	}
+
+	public static TableDetails tableDetails(String tableDetails) {
+		ObjectMapper mapper = new ObjectMapper();
+		try {
+			JsonNode actualObj = mapper.readTree(tableDetails);
+			String tableName = actualObj.get("tableName").toString()
+					.replace("\"", "");
+			JsonNode tableData = actualObj.get("tableData");
+			String functionPerformed = actualObj.get("func").toString()
+					.replace("\"", "");
+			String status = "";
+			if (functionPerformed.equalsIgnoreCase("update")) {
+				String column = actualObj.get("updatedColumn").toString()
+						.replace("\"", "");
+				String value = actualObj.get("updatedValue").toString()
+						.replace("\"", "");
+				status = DashBoardServiceUtility.updateDB(tableName, tableData,
+						column, value);
+			}
+
+			ArrayList<TableModel> tableStructure = DashBoardServiceUtility
+					.getTableColumns(tableName);
+			TableDetails table = DashBoardServiceUtility.getTableRows(
+					tableName, tableStructure);
+			table.setStatus(status);
+			return table;
+		} catch (JsonProcessingException e) {
+			LoggingManager.logMessage(e.getMessage(),org.apache.log4j.Level.ERROR );
+		} catch (IOException e) {
+			LoggingManager.logMessage(e.getMessage(),org.apache.log4j.Level.ERROR );
+		}
+		return null;
+
+	}
+
+	public static ArrayList<ApplicationMonitorLog> getAllApplicationsList() {
+
+		ArrayList<ApplicationMonitorLog> appList = DashBoardServiceUtility
+				.getApplicationsList();
+
+		return appList;
+	}
+
+	public static ArrayList<ApplicationNotificationLog> getAppNotifbrand() {
+
+		ArrayList<ApplicationNotificationLog> appList = DashBoardServiceUtility
+				.getAppNotificationByBrand();
+
+		return appList;
+	}
+
+	public static ArrayList<String> getAllRoles() {
+
+		ArrayList<String> appList = DashBoardServiceUtility.getRoles();
+		return appList;
+	}
+
+	public static HashMap<Integer, String> getUserList() {
+
+		HashMap<Integer, String> userList = DashBoardServiceUtility
+				.getUserLists();
+		return userList;
+	}
+
+	public static ArrayList<ValidBrands> getBrandList()
+
+	{
+		ArrayList<ValidBrands> brandList = DashBoardServiceUtility
+				.getValidBrand();
+		return brandList;
+	}
+
+	public static ArrayList<ValidTriggerTypes> getTriggerList()
+
+	{
+		ArrayList<ValidTriggerTypes> triggerList = DashBoardServiceUtility
+				.getValidTriggerTypes();
+		return triggerList;
+	}
+
+	public static void addUser(UserRoles userRoles) {
+
+		DashBoardServiceUtility.addUsers(userRoles);
+	}
+
+	public static String addToDb(HashMap<String, String> mapKv) {
+		String tableName = mapKv.get("tableName");
+		mapKv.remove("id");
+		mapKv.remove("oper");
+		mapKv.remove("tableName");
+		String status = "";
+		try {
+			ObjectMapper mapper = new ObjectMapper();
+
+			String json = mapper.writeValueAsString(mapKv);
+			JsonNode jsonNode = mapper.readTree(json);
+
+			status = DashBoardServiceUtility.insertIntoDb(tableName, jsonNode);
+		} catch (JsonProcessingException e) {
+			LoggingManager.logMessage(e.getMessage(),org.apache.log4j.Level.ERROR );
+		} catch (IOException e) {
+			LoggingManager.logMessage(e.getMessage(),org.apache.log4j.Level.ERROR );
+		}
+		return status;
+	}
+
+	public static String deleteFromDb(HashMap<String, String> mapKv) {
+		String tableName = mapKv.get("tableName");
+		String rowData = mapKv.get("rowData");
+		mapKv.remove("id");
+		mapKv.remove("oper");
+		mapKv.remove("tableName");
+		String status = "";
+		try {
+			ObjectMapper mapper = new ObjectMapper();
+			JsonNode actualObj = mapper.readTree(rowData);
+
+			status = DashBoardServiceUtility.deleteFromDb(tableName, actualObj);
+		} catch (JsonProcessingException e) {
+			LoggingManager.logMessage(e.getMessage(),org.apache.log4j.Level.ERROR );
+		} catch (IOException e) {
+			LoggingManager.logMessage(e.getMessage(),org.apache.log4j.Level.ERROR );
+		}
+		return status;
+	}
+
+	public static ArrayNode getFilterDetails(String updatedData) {
+
+		ArrayNode jsonArray = DashBoardServiceUtility
+				.getFilterDetails(updatedData);
+		return jsonArray;
+
+	}
+
+	public static HashMap<String, String> getChartDetails(String startDate,
+			String endDate, String triggerType, String brandId) {
+
+		HashMap<String, String> chartData = DashBoardServiceUtility
+				.getChartData(startDate, endDate,triggerType,brandId);
+		return chartData;
+	}
+
+	public static ArrayList<TriggerLogModel> getInputJsonValue() {
+		ArrayList<TriggerLogModel> JsonVal = DashBoardServiceUtility
+				.getInputJson();
+		return JsonVal;
+	}
+
+	public static ArrayNode getApplicationDetails() {
+		return DashBoardServiceUtility.getApplicationDetails();
+	}
+
+	public static ArrayNode clearMyBaitsCache(String data)
+	{
+		ArrayNode clearCacheArr=DashBoardServiceUtility.clearMyBaitsCache(data);
+		ArrayNode appDetailsArr=DashBoardServiceUtility.getApplicationDetails();
+		ArrayNode finalArr=JsonNodeFactory.instance.arrayNode();
+		for(JsonNode json:appDetailsArr){
+			ObjectNode obj=(ObjectNode) json;
+			for(JsonNode innerJson:clearCacheArr){
+				
+			if(obj.get("APPLICATIONNAME").toString().equalsIgnoreCase(innerJson.get("APPLICATIONNAME").toString()) && obj.get("URL").toString().equalsIgnoreCase(innerJson.get("URL").toString())){
+				obj.put("STATUS",innerJson.get("STATUS").toString().replace("\"", ""));
+				break;
+			}
+			
+			}
+			finalArr.add(obj);
+		}
+		return finalArr;
+	}
+	
+	public static HashMap<String, String> getCnpStatus(String dateRange) {
+		
+		Filter filter=getFilterObject(dateRange);
+		HashMap<String, String> chartDetails = DatabaseMonitoringServices.getChartDetails(filter.getStartDate(),filter.getEndDate(),filter.getTriggetType(),filter.getBrandId());
+		return chartDetails;
+	}
+	
+public static HashMap<String, String> getFilteredNotificationSummary(String dateRange) {
+		
+		Filter filter=getFilterObject(dateRange);
+		HashMap<String, String> finalArr=new HashMap<>();
+		finalArr.putAll(DashBoardServiceUtility.getStatusDetails(filter));
+		finalArr.putAll(DashBoardServiceUtility.getFailureDetails(filter));
+		return finalArr;
+	}
+	
+public static ObjectNode getNotificationSummaryHome(String dateRange) {
+	
+	ExecutorService executor=Executors.newFixedThreadPool(2);
+	String[] tebleDetails={"TRIGGERLOG","NOTIFICATION"};
+	Filter filter=null;
+	if(dateRange!=null){
+		filter=getFilterObject(dateRange);
+	}
+	
+	for(String tableName:tebleDetails){
+		Runnable tableDetails =new com.staples.gnpgatekeeper.operations.AppStatusThread(tableName,filter);
+		executor.execute(tableDetails);
+	}
+	executor.shutdown();
+	while (!executor.isTerminated()) {		 
+	}
+	ObjectNode finalObjectNode=AppStatusThread.finalObjectNode;
+	AppStatusThread.finalObjectNode=null;
+	return finalObjectNode;
+}
+	
+public static Filter getFilterObject(String dateRange){
+	String[] dates = dateRange.split("\",\"");
+	dates[0] = dates[0].replace("\":\"", "=").replace("startDate=", "").replace("{\"", "").concat(":00");
+	dates[1] = dates[1].replace("\":\"", "=").replace("endDate=", "").replace("\"}", "").concat(":00");
+	dates[2] = dates[2].replace("\":\"", "=").replace("triggerType=", "").replace("\"}", "");
+	dates[3] = dates[3].replace("\":\"", "=").replace("brandIds=", "").replace("\"}", "");
+	String triggerType=""+dates[2];
+	String brandID=""+dates[3];
+	String ed =null;
+	String sd = null;
+	DateFormat df = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss");
+	 DateFormat dateformat = new SimpleDateFormat("dd-MMM-yy HH:mm:ss");
+	 try {
+		
+
+	if(dates[0].equalsIgnoreCase(":00") && dates[1].equalsIgnoreCase(":00")){
+		sd="24-AUG-01 00:00:00";
+		// Get the date today using Calendar object.
+		Date current = Calendar.getInstance().getTime();   
+		ed = dateformat.format(current);	
+	}
+	else if(dates[0].equalsIgnoreCase(":00") && !dates[1].equalsIgnoreCase(":00")){
+		sd="24-AUG-01 00:00:00";
+			ed = dateformat.format(df.parse(dates[1])).toString().toUpperCase();
+		
+	}else if (!dates[0].equalsIgnoreCase(":00") && dates[1].equalsIgnoreCase(":00")) {
+			sd = dateformat.format(df.parse(dates[0])).toString().toUpperCase();
+			Date current = Calendar.getInstance().getTime();   
+			ed = dateformat.format(current);	
+	
+		
+	}else{
+		sd = dateformat.format(df.parse(dates[0])).toString().toUpperCase();
+		ed = dateformat.format(df.parse(dates[1])).toString().toUpperCase();
+	 
+	}	} catch (Exception e) {
+		// TODO: handle exception
+		LoggingManager.logMessage(e.getMessage(),org.apache.log4j.Level.ERROR );
+	}
+	 return new Filter(sd,ed,brandID,triggerType);
+	 
+	 
+}
+	public static ArrayNode getGridJson(JsonNode chartDetails){
+		ArrayNode gridJson=JsonNodeFactory.instance.arrayNode();
+		Iterator<String> filedNames=chartDetails.fieldNames();
+		for(int i=0;i<chartDetails.size();i++){
+			ObjectNode tempJson=JsonNodeFactory.instance.objectNode();
+			String fieldName=filedNames.next();
+			tempJson.put("Status", fieldName.toUpperCase());
+			tempJson.put("Count", chartDetails.get(fieldName));
+			gridJson.add(tempJson);
+		}
+		
+		return gridJson;
+	}
+
+	public static String displayPreviewData(int triggerType, int brandid, String name,String screen) throws Exception
+	{
+
+		double version;
+		int sampleSetId;
+		int templateId;			
+		final DataService source = new DataService();
+		source.DataSourceType =  DataSourceType.REST;
+
+		SampleSet sampleSet = DashBoardServiceUtility.getSampleSetDtls(triggerType,brandid,name,screen);
+		version=sampleSet.versionId;
+		sampleSetId=sampleSet.id;
+
+		TemplateInfo templateInfo=DashBoardServiceUtility.getTemplateDtls(triggerType,brandid);
+		if(templateInfo!=null){
+			templateId=templateInfo.TemplateId;		
+
+			Map<String, Parameter> Params = new HashMap<String, Parameter>();
+			Params.put("brand_id", new Parameter("brand_id",String.valueOf(brandid)));
+			Params.put("trigger_id", new Parameter("trigger_id", String.valueOf(triggerType)))	;
+			Params.put("version_stamp", new Parameter("version_stamp", String.valueOf(version)));
+			Params.put("sample_set_id", new Parameter("sample_set_id", String.valueOf(sampleSetId)));
+			source.Parameters = Params;
+			source.DataSourceType =  DataSourceType.REST;
+
+			String previewURL=Config.Current().APIBase.Core.PreviewURL;
+			previewURL=previewURL.replace("{templateId}", ""+templateId+"");
+			source.ServiceUrl = previewURL;
+			WebService.Call(source, null,
+					new IServiceCallback() {			
+				public void onSuccess(String result) {
+					finalJson=result;						
+				}
+				public void onFailure(String result,DispatcherErrors errorCode) {
+					LoggingManager.logMessage("JSOn is empty",org.apache.log4j.Level.ERROR );
+				}
+			});
+
+			return finalJson;
+			}
+		   else
+		   {
+				return "No Template Available for this trigger";
+		   }
+	}
+
+
+	public static String enableSampleSetVersionData(int triggerType, int brandid, int samplesetid, String name)
+	{
+		DashBoardServiceUtility.updateVersionTo(triggerType,brandid,samplesetid,name);	
+		String finalString=getSampleDetailsData(triggerType,brandid,name);		
+		return finalString;
+	}
+	
+	public static String getJSONData(int triggerType, int brandid, String name,int samplesetid)
+	{
+		String data="";
+		double version=0.0;;
+		String enabled="";
+		int sampleSetId = 0;		
+		List<SampleSet> lstValidSampleDtls =DashBoardServiceUtility.getSampleSetDtlsForManage(triggerType,brandid,name);	
+		for(int cnt=0;cnt<lstValidSampleDtls.size();cnt++)
+		{
+			if(lstValidSampleDtls.get(cnt).id==samplesetid)
+			{
+				data=lstValidSampleDtls.get(cnt).JSON;
+				break;
+			}
+		}	
+		ArrayNode jsonArray=JsonNodeFactory.instance.arrayNode();
+		if(lstValidSampleDtls!=null && lstValidSampleDtls.size()>0)
+		{
+			for(int dtlsCnt=0;dtlsCnt<lstValidSampleDtls.size();dtlsCnt++)
+			{						
+				SampleSet sampleSet=(SampleSet)lstValidSampleDtls.get(dtlsCnt);				
+				sampleSetId=sampleSet.id;
+				version=sampleSet.versionId;
+				enabled=(sampleSet.enabled==1)?"true":"false";
+				ObjectNode object=JsonNodeFactory.instance.objectNode();
+				object.put("SampleSetId", sampleSetId);
+				object.put("Version", version);
+				object.put("Enabled", enabled);
+				jsonArray.add(object);							
+			}			
+		}		
+		String finalString=data+"~"+jsonArray.toString();	
+		return finalString;	
+	}
+	
+
+	public static String getSampleDetailsData(int triggerType, int brandid, String name)
+	{
+		String data="";
+		double version=0.0;;
+		String enabled="";
+		int sampleSetId = 0;				
+		List<SampleSet> lstValidSampleDtls =DashBoardServiceUtility.getSampleSetDtlsForManage(triggerType,brandid,name);
+		ObjectMapper mapper=new ObjectMapper().enable(SerializationFeature.INDENT_OUTPUT);
+		Object json=new Object();
+		
+		try {
+			json = mapper.readValue(lstValidSampleDtls.get(0).JSON, Object.class );
+			 data=mapper.writerWithDefaultPrettyPrinter().writeValueAsString( json );
+		} catch (Exception e1) {
+			// TODO Auto-generated catch block
+			e1.printStackTrace();
+		} 
+	
+		ArrayNode jsonArray=JsonNodeFactory.instance.arrayNode();
+		if(lstValidSampleDtls!=null && lstValidSampleDtls.size()>0)
+		{
+			for(int dtlsCnt=0;dtlsCnt<lstValidSampleDtls.size();dtlsCnt++)
+			{						
+				SampleSet sampleSet=(SampleSet)lstValidSampleDtls.get(dtlsCnt);				
+				sampleSetId=sampleSet.id;
+				version=sampleSet.versionId;
+				enabled=(sampleSet.enabled==1)?"true":"false";
+				ObjectNode object=JsonNodeFactory.instance.objectNode();
+				object.put("SampleSetId", sampleSetId);
+				object.put("Version", version);
+				object.put("Enabled", enabled);
+				jsonArray.add(object);							
+			}			
+		}		
+		String finalString= data+"~"+jsonArray.toString();	
+		return finalString;	
+	}
+
+	public static String getNameDtlsOnTriggerAndBrand(int triggerType, int brandid,String screen)
+	{		
+		String finalString=null;		
+		String name=null;		
+		//String template=null;
+		//StringBuffer nameStr=new StringBuffer("");
+		ArrayNode jsonArray=JsonNodeFactory.instance.arrayNode();
+		List<SampleSet> lstValidNames = DashBoardServiceUtility.getSampleSetNames(triggerType,brandid,screen);
+		if(lstValidNames!=null && lstValidNames.size()>0)
+		{
+			for(int nameCnt=0;nameCnt<lstValidNames.size();nameCnt++)
+			{								
+				SampleSet sampleSet=(SampleSet)lstValidNames.get(nameCnt);				
+				name=sampleSet.name;				
+					
+				ObjectNode object=JsonNodeFactory.instance.objectNode();
+				object.put("name", name);							
+				jsonArray.add(object);
+			}
+			finalString="{\"validName\":"+jsonArray.toString()+"}";
+		}
+		return finalString;		
+	}
+
+	public static String getBrandDtlsOnTrigger(int triggerType,String Screen) 
+	{		
+		String finalString=null;
+		int brandId=0;
+		String brandDesc=null;		
+		
+		List<ValidBrands> lstValidBrands = DashBoardServiceUtility.getSampleSetBrand(triggerType,Screen);
+		ArrayNode jsonArray=JsonNodeFactory.instance.arrayNode();
+		
+		if(lstValidBrands!=null && lstValidBrands.size()>0)
+		{
+			for(int brndCnt=0;brndCnt<lstValidBrands.size();brndCnt++)
+			{								
+				ValidBrands validBrand=(ValidBrands)lstValidBrands.get(brndCnt);
+				brandId=validBrand.getBrandid();
+				brandDesc=validBrand.getDescription();
+				
+				ObjectNode object=JsonNodeFactory.instance.objectNode();
+				object.put("brandid", brandId);
+				object.put("description", brandDesc);				
+				jsonArray.add(object);
+				
+			}
+			finalString="{\"validBrands\":"+jsonArray.toString()+"}";
+		}
+		return finalString;
+	}
+
+	public static SampleSet getSampleDetailsData(String sampleId) {
+		SampleSet sampleDataObj=DashBoardServiceUtility.getSampleSetData(new Integer(sampleId));
+		return sampleDataObj;
+	}
+
+	public static void updateJSON(SampleData data)
+	{
+		DashBoardServiceUtility.updateJSON(data.id,data.json_text);		
+	}
+
+	public static ArrayList<ValidTriggerTypes> getValidSampleTrigger(String value)
+
+	{
+		ArrayList<ValidTriggerTypes> triggerList = DashBoardServiceUtility.getValidSampleTriggerTypes(value);
+		ValidTriggerTypes validTr=new ValidTriggerTypes();
+		validTr.setDescription("Select Trigger");
+		validTr.setTriggertype(-1);
+		if(triggerList!=null)
+			triggerList.add(0,validTr);
+		else
+		{
+			triggerList=new ArrayList<ValidTriggerTypes>();
+			triggerList.add(0,validTr);
+		}
+		return triggerList;
+	}
+
+	//This Method has been created for Generating HTML Template Preview
+	/*public static String generateHTMLTemplatePreview(int triggerType, int brandid, String htmltemplate) throws Exception
+	{	
+		ObjectNode object=JsonNodeFactory.instance.objectNode();
+		object.put("triggerType", triggerType);
+		object.put("brandId", brandid);		
+		object.put("template", htmltemplate);	
+		
+		Map<String, Parameter> Params = new HashMap<String, Parameter>();
+		Params.put("jsonData", new Parameter("jsonData", object.toString()));
+		
+		final DataService source = new DataService();
+		source.Verb=DataSourceVerb.POST;		
+		source.Parameters = Params;
+		source.DataSourceType =  DataSourceType.REST;
+		
+		String previewURL="http://localhost:8081/APIBase/rest/APIBase/preview";		
+		source.ServiceUrl = previewURL;
+		WebService.Call(source, null,
+				new IServiceCallback() {			
+					public void onSuccess(String result) {
+						finalJson=result;						
+					}
+					public void onFailure(String result,DispatcherErrors errorCode) {
+						System.out.println("json is empty");
+					}
+				});
+		
+		return finalJson;
+	
+	}*/	
+	public static List<SampleSet> getValidSampleSetDtls(int triggerType,int brandid,String name)
+
+	{
+		List<SampleSet> sampleSetList = DashBoardServiceUtility.getSampleSetDtlsForManage(triggerType,brandid,name);
+		return sampleSetList;
+	}
+
+	public static void deleteSample(String sampleId)
+	{
+		DashBoardServiceUtility.deleteSample(Integer.valueOf(sampleId));				
+	}
+	
+}

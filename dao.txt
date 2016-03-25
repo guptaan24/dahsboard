@@ -1,0 +1,922 @@
+package com.cnp.DashBoardDAO;
+import java.sql.Timestamp;
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Calendar;
+import java.util.Date;
+import java.util.Enumeration;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
+import javax.servlet.http.HttpServletRequest;
+import org.apache.ibatis.exceptions.PersistenceException;
+import org.apache.log4j.Logger;
+
+import com.cnp.DashBoardBO.DatabaseMonitoringServices;
+import com.cnp.datamodels.ApplicationMonitorLog;
+import com.cnp.datamodels.ApplicationNotificationLog;
+import com.cnp.datamodels.ChartObject;
+import com.cnp.datamodels.KeyValue;
+import com.cnp.datamodels.TableDetails;
+import com.cnp.datamodels.TableManipulation;
+import com.cnp.datamodels.TableModel;
+import com.cnp.datamodels.TriggerLogModel;
+import com.cnp.datamodels.UserRoles;
+import com.cnp.datamodels.ValidBrands;
+import com.cnp.datamodels.ValidTriggerTypes;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.JsonNodeFactory;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+//import com.staples.gnp.common.SessionFactory;
+import com.staples.gnp.configuration.Config;
+import com.staples.gnp.domain.DataService;
+import com.staples.gnp.domain.DataSourceType;
+import com.staples.gnp.domain.DispatcherErrors;
+import com.staples.gnp.domain.Parameter;
+import com.staples.gnp.domain.PulseLog;
+import com.staples.gnp.domain.SampleSet;
+import com.staples.gnp.domain.TemplateInfo;
+import com.staples.gnp.log4j.LoggingManager;
+import com.staples.gnp.mybatis.MyBatis;
+import com.staples.gnp.services.IServiceCallback;
+import com.staples.gnp.services.WebService;
+
+	
+	public class DashBoardServiceUtility extends DashBoardServiceUtilityHelper{
+		public static String finalJson="";
+		static Logger logger = LoggingManager.getAppLogger(DashBoardServiceUtility.class.getName());
+		private static String jsonOutput;
+		public static Map<Integer, String> getAllTables() {
+	
+			
+			
+			List<String> tables = new ArrayList<String>();
+			try {
+				tables = MyBatis.SessionFactory
+						.GetList("com.dal.DashboardMapper.getAllTables");
+			} catch (Exception e) {
+				LoggingManager.logMessage(e.getMessage(),org.apache.log4j.Level.ERROR );
+			}
+	
+			Map<Integer, String> tableMap = new TreeMap<Integer, String>();
+			int i = 0;
+			for (String table : tables) {
+	
+				tableMap.put(i, table);
+				i++;
+			}
+			if (DatabaseMonitoringServices.validTypes == null) {
+				DatabaseMonitoringServices.validTypes = new HashMap<String, String>();
+				DatabaseMonitoringServices.validTypes.putAll(getAllFields(tables));
+			}
+			return tableMap;
+		}
+	
+		public static ArrayList<TableModel> getTableColumns(final String tableName) {
+	
+			TableModel tbd = new TableModel();
+			ArrayList<TableModel> tableColumn = new ArrayList<TableModel>();
+			try {
+				tableColumn = (ArrayList<TableModel>) MyBatis.SessionFactory
+						.GetList("com.dal.DashboardMapper.getAllColumns", new Object() {
+							String table = tableName;
+						});
+			} catch (Exception e) {
+				LoggingManager.logMessage(e.getMessage(),org.apache.log4j.Level.ERROR );
+			}
+			return tableColumn;
+		}
+	
+		public static TableDetails getTableRows(final String tableName,
+				ArrayList<TableModel> tableModels) {
+	
+			ArrayList<HashMap<Object, Object>> results = new ArrayList<HashMap<Object,Object>>();
+		
+			try {
+				results = (ArrayList<HashMap<Object, Object>>) MyBatis.SessionFactory
+						.GetList("com.dal.DashboardMapper.getAllRows", new Object() {
+							String table = tableName;
+						});
+			} catch (Exception e) {
+				LoggingManager.logMessage(e.getMessage(),org.apache.log4j.Level.ERROR );
+			}
+	
+			ArrayNode colModelArr = JsonNodeFactory.instance.arrayNode();
+			ArrayNode rowModelArr = JsonNodeFactory.instance.arrayNode();
+			ArrayList<String> colNames = new ArrayList<String>();
+	
+			for (TableModel td : tableModels) {
+				ObjectNode colModel = JsonNodeFactory.instance.objectNode();
+				colNames.add(td.getColumnName());
+				colModel.put("name", td.getColumnName());
+				colModel.put("index", td.getColumnName());
+//				colModel.put("formatter", "function() {"
+//                 +  " return \"<button onclick='OpenDialog(this)' style='margin-left:12px'>Pop Up Dlg</button>\";"
+//              + " }");
+				
+				
+				if (td.getColumnType().contains("NUMBER")) {
+					colModel.put("sorttype", "int");
+				} else if (td.getColumnType().contains("TIME")) {
+					colModel.put("sorttype", "date");
+				}
+				if (!tableName.contains("VALID")) {
+					if (DatabaseMonitoringServices.validTypes!=null && DatabaseMonitoringServices.validTypes.containsKey(td
+							.getColumnName())) {
+						String validValues = getValidfieldsValues(
+								td.getColumnName(),
+								DatabaseMonitoringServices.validTypes.get(td
+										.getColumnName()));
+						colModel.put("edittype", "select");
+						ObjectNode innerNode = JsonNodeFactory.instance
+								.objectNode();
+						innerNode.put("value", validValues);
+						colModel.put("editoptions", innerNode);
+					}
+				}
+				colModel.put("editable", true);
+				colModelArr.add(colModel);
+			}
+			if (results != null) {
+				for (HashMap<Object, Object> map : results) {
+					ObjectNode rowModel = JsonNodeFactory.instance.objectNode();
+					for (TableModel tbl : tableModels) {
+						if (map.get(tbl.getColumnName()) == null) {
+							map.put(tbl.getColumnName(), "");
+						}
+						rowModel.put(tbl.getColumnName(),
+								map.get(tbl.getColumnName()).toString());
+					}
+	if(tableName.equalsIgnoreCase("APPLICATIONDETAILS")){
+		rowModel.put("STATUS", "");
+	}
+					rowModelArr.add(rowModel);
+				}
+			}
+	
+			if(tableName.equalsIgnoreCase("APPLICATIONDETAILS")){
+				colNames.add("STATUS");
+				ObjectNode colModel = JsonNodeFactory.instance.objectNode();
+				colModel.put("name","STATUS");
+				colModel.put("index", "STATUS");
+				colModel.put("editable", false);
+				colModelArr.add(colModel);
+				
+			}
+			
+			
+			return new TableDetails(colNames, colModelArr, rowModelArr);
+		}
+	
+		public static String insertIntoDb(String tableName, JsonNode tableData)  {
+	
+			try {
+				TableManipulation tableModel = getManipulatedData(tableData,
+						tableName,"","");
+				MyBatis.SessionFactory.Insert(
+						"com.dal.DashboardMapper.insertinto-Configuration",
+						tableModel);
+			} catch (NumberFormatException e) {
+				LoggingManager.logMessage(e.getMessage(),org.apache.log4j.Level.ERROR );
+				return "Please enter a valid integer " + e.getMessage();
+			}
+			catch (PersistenceException e) {
+				LoggingManager.logMessage(e.getMessage(),org.apache.log4j.Level.ERROR );
+				return e.toString().split("\n")[1].replaceAll("###", "");
+			}
+			catch(Exception e){
+				LoggingManager.logMessage(e.getMessage(),org.apache.log4j.Level.ERROR );
+				return "generic exception";
+			}
+	
+			return "Success";
+	
+		}
+	
+		public static String updateDB(String tableName, JsonNode tableData,
+				String column, String value) {
+			try {
+				// json.put(column, value);
+				TableManipulation tableModel = getManipulatedData(tableData, tableName,column,value);
+				tableModel.setUpdateColumn(column);
+				
+				MyBatis.SessionFactory.Update(
+						"com.dal.DashboardMapper.update-Configuration", tableModel);
+			}catch(PersistenceException e){
+				LoggingManager.logMessage(e.getMessage(),org.apache.log4j.Level.ERROR );
+				return e.toString().split("\n")[1].replaceAll("###", "");
+			}catch(NumberFormatException e){
+				LoggingManager.logMessage(e.getMessage(),org.apache.log4j.Level.ERROR );
+				return "Please enter a valid integer " + e.getMessage();
+			}
+			catch (Exception e) {
+				LoggingManager.logMessage(e.getMessage(),org.apache.log4j.Level.ERROR );
+				return "Failure";
+			}
+	
+			return "Success";
+	
+		}
+	
+		public static String deleteFromDb(String tableName, JsonNode tableData) {
+	
+			try {
+				TableManipulation tableModel = getManipulatedData(tableData,
+						tableName,"","");
+				MyBatis.SessionFactory.Delete(
+						"com.dal.DashboardMapper.deleteFrom-Configuration",
+						tableModel);
+			} catch (Exception e) {
+				LoggingManager.logMessage(e.getMessage(),org.apache.log4j.Level.ERROR );
+				return "Failure";
+			}
+	
+			return "Success";
+	
+		}
+	
+		public static TableManipulation getManipulatedData(JsonNode json,
+				String tableName,String column,String value) throws Exception {
+			ObjectMapper mapper = new ObjectMapper();
+			Map<String, Object> result = mapper.convertValue(json, Map.class);
+			List<KeyValue> rows = new ArrayList<KeyValue>();
+			Iterator it = result.entrySet().iterator();
+			ArrayList<TableModel> tableColumns = getTableColumns(tableName);
+	
+			while (it.hasNext()) {
+				Map.Entry pair = (Map.Entry) it.next();
+				for (TableModel tbm : tableColumns) {
+					if (tbm.getColumnName().equalsIgnoreCase(
+							pair.getKey().toString())
+							&& tbm.columnType.contains("VARCHAR")) {
+						if(pair.getKey().toString().equalsIgnoreCase(column)){
+							if( value==""){
+								pair.setValue("''");
+							}else{
+							pair.setValue("'" + value+ "'");
+							}
+							
+						}else{
+						if( pair.getValue().toString()==""){
+							pair.setValue(null);
+						}else{
+						pair.setValue("'" + pair.getValue().toString() + "'");
+						}
+						}
+						break;
+					} else if (tbm.getColumnName().equalsIgnoreCase(
+							pair.getKey().toString())
+							&& tbm.columnType.contains("NUMBER")) {
+						
+				
+						if(pair.getKey().toString().equalsIgnoreCase(column)){
+							if( value==""){
+								pair.setValue(0);
+							}else{
+							pair.setValue(Integer.parseInt(value));
+							}
+							
+						}else{
+						
+						
+						pair.setValue(Integer.parseInt(pair.getValue().toString()));
+						}
+						break;
+					}
+					else if (tbm.getColumnName().equalsIgnoreCase(
+							pair.getKey().toString())
+							&& tbm.columnType.contains("TIMESTAMP")) {
+						
+						if(pair.getKey().toString().equalsIgnoreCase(column)){
+							String time = "to_timestamp('".concat(value).concat("',").concat("'yyyy-mm-dd HH24:mi:ss.FF')");
+							pair.setValue(time);
+							
+						}else{
+						
+						
+						String time = "to_timestamp('".concat(pair.getValue().toString()).concat("',").concat("'yyyy-mm-dd HH24:mi:ss.FF')");
+						pair.setValue(time);}
+						break;
+					}else if (tbm.getColumnName().equalsIgnoreCase(
+							pair.getKey().toString())
+							&& tbm.columnType.contains("NCLOB")) {
+						
+						pair.setValue("'" + pair.getValue().toString() + "'");
+						break;
+						
+					}
+					
+				}
+				if(!(tableName.equalsIgnoreCase("APPLICATIONDETAILS") && pair.getKey().toString().equalsIgnoreCase("STATUS"))){
+					rows.add(new KeyValue(pair.getKey().toString(), pair.getValue()));
+				}
+			}
+			TableManipulation tableModel = new TableManipulation();
+	
+			tableModel.setTableName(tableName);
+			tableModel.setKeyValue(rows);
+			return tableModel;
+		}
+	
+		public static String getValidfieldsValues(final String columnName,
+				final String tableName) {
+			String values = null;
+			try {
+				if(tableName.equalsIgnoreCase("ValidBrands")){
+					values = (String) MyBatis.SessionFactory.Get(
+							"com.dal.DashboardMapper.getValidValuesBrand", new Object() {
+								String table = tableName;
+								String column = columnName;
+							});	
+					
+				}else if(tableName.equalsIgnoreCase("validtriggertypes")){
+					values = (String) MyBatis.SessionFactory.Get(
+							"com.dal.DashboardMapper.getValidValuesTriggers", new Object() {
+								String table = tableName;
+								String column = columnName;
+							});	
+					
+				} else{
+				
+				
+				
+				values = (String) MyBatis.SessionFactory.Get(
+						"com.dal.DashboardMapper.getValidValues", new Object() {
+							String table = tableName;
+							String column = columnName;
+						});}
+			} catch (Exception e) {
+				LoggingManager.logMessage(e.getMessage(),org.apache.log4j.Level.ERROR );
+			}
+			values = values.substring(0, values.lastIndexOf(";"));
+			return values;
+		}
+	
+		public static HashMap<String, String> getAllFields(List<String> tables) {
+			HashMap<String, String> valueMap = new HashMap<String, String>();
+			for (String table : tables) {
+				if (table.contains("VALID")) {
+					ArrayList<TableModel> models = getTableColumns(table);
+					for (TableModel tbm : models) {
+						if (!tbm.getColumnName().equalsIgnoreCase("description")) {
+							valueMap.put(tbm.getColumnName(), table);
+						}
+					}
+				}
+			}
+			return valueMap;
+		}
+	
+		public static ArrayList<ApplicationMonitorLog> getApplicationsList() {
+	
+			ArrayList<ApplicationMonitorLog> applicationMonitorLog = new ArrayList<ApplicationMonitorLog>();
+			try {
+				applicationMonitorLog = (ArrayList<ApplicationMonitorLog>) MyBatis.SessionFactory
+						.GetList("com.dal.DashboardMapper.getApplicationDetails");
+			} catch (Exception e) {
+				// TODO Auto-generated catch block
+				LoggingManager.logMessage(e.getMessage(),org.apache.log4j.Level.ERROR );
+			}
+			return applicationMonitorLog;
+		}
+	
+		public static ArrayList<ApplicationNotificationLog> getAppNotificationByBrand() {
+	
+			ArrayList<ApplicationNotificationLog> AppnotifBrand = new ArrayList<ApplicationNotificationLog>();
+			try {
+				AppnotifBrand = (ArrayList<ApplicationNotificationLog>) MyBatis.SessionFactory
+						.GetList("com.dal.DashboardMapper.getAppnotifBrand2");
+			} catch (Exception e) {
+				// TODO Auto-generated catch block
+				LoggingManager.logMessage(e.getMessage(),org.apache.log4j.Level.ERROR );
+			}
+	
+			return AppnotifBrand;
+		}
+	
+		public static ArrayList<String> getRoles() {
+	
+			ArrayList<String> roles = new ArrayList<String>();
+			try {
+				roles = (ArrayList<String>) MyBatis.SessionFactory
+						.GetList("com.dal.DashboardMapper.getAllRoles");
+			} catch (Exception e) {
+				// TODO Auto-generated catch block
+				LoggingManager.logMessage(e.getMessage(),org.apache.log4j.Level.ERROR );
+			}
+			return roles;
+		}
+	    
+		public static HashMap<Integer,String> getUserLists() {
+			
+			HashMap<Integer,String> rolesMap = new HashMap<Integer,String>();
+			ArrayList<UserRoles> roles = new ArrayList<UserRoles>();
+			try {
+				roles = (ArrayList<UserRoles>) MyBatis.SessionFactory
+						.GetList("com.dal.DashboardMapper.getUserId");
+				for(UserRoles ur:roles){
+					rolesMap.put(ur.getUserId(), ur.getRole());
+				}
+				
+			} catch (Exception e) {
+				LoggingManager.logMessage(e.getMessage(),org.apache.log4j.Level.ERROR );
+			}
+			return rolesMap;
+		}
+	
+	public static ArrayList<ValidBrands> getValidBrand() {
+		ArrayList<ValidBrands> brandList = new ArrayList<ValidBrands>();
+		try {
+			brandList = (ArrayList<ValidBrands>) MyBatis.SessionFactory
+					.GetList("com.dal.DashboardMapper.validBrands");
+
+		} catch (Exception e) {
+			LoggingManager.logMessage(e.getMessage(),org.apache.log4j.Level.ERROR );
+		}
+		return brandList;
+	}
+	public static ArrayList<ValidTriggerTypes> getValidTriggerTypes() {
+		ArrayList<ValidTriggerTypes> triggerList = new ArrayList<ValidTriggerTypes>();
+		try {
+			triggerList = (ArrayList<ValidTriggerTypes>) MyBatis.SessionFactory
+					.GetList("com.dal.DashboardMapper.validTriggerTypes");
+
+		} catch (Exception e) {
+			LoggingManager.logMessage(e.getMessage(),org.apache.log4j.Level.ERROR );
+		}
+		return triggerList;
+	}
+
+	public static ArrayList<TriggerLogModel> getInputJson()
+	{
+		ArrayList<TriggerLogModel> JsonValue=new  ArrayList<TriggerLogModel>();
+		 //SessionFactory s=new SessionFactory(Resources.getResourceAsStream("configuration.xml"));
+		try
+		{
+			JsonValue= (ArrayList<TriggerLogModel>)MyBatis.SessionFactory.GetList("com.dal.DashboardMapper.select_InputJson");
+		}
+		catch(Exception e)
+		{
+			LoggingManager.logMessage(e.getMessage(),org.apache.log4j.Level.ERROR );
+		}
+		return JsonValue;
+	
+	}
+	public static void addUsers(UserRoles userrole) {
+	
+			try {
+				MyBatis.SessionFactory.Insert(
+						"com.dal.DashboardMapper.insertinto-userroles", userrole);
+			} catch (Exception e) {
+				// TODO Auto-generated catch block
+				LoggingManager.logMessage(e.getMessage(),org.apache.log4j.Level.ERROR );
+			}
+		}
+	
+		public static HashMap<String, String> getListFromRequest(
+				HttpServletRequest request) {
+			Enumeration<String> parameterNames = request.getParameterNames();
+			HashMap<String, String> mapKv = new HashMap<String, String>();
+			String paramName = "";
+			String paramValue = "";
+			while (parameterNames.hasMoreElements()) {
+	
+				paramName = parameterNames.nextElement();
+				String[] paramValues = request.getParameterValues(paramName);
+				for (int i = 0; i < paramValues.length; i++) {
+					paramValue = paramValues[i];
+				}
+				mapKv.put(paramName, paramValue);
+	
+			}
+
+			return mapKv;
+		}
+		
+	
+		public static HashMap<String, String> getChartData(String startDate,String endDate,String triggerType,String brandIds) {
+			List<ChartObject> chartDetails = new ArrayList<ChartObject>();
+			String lastUpdatedDate="";
+			JsonNode json=JsonNodeFactory.instance.objectNode();
+			ObjectMapper mapper = new ObjectMapper();
+			HashMap<String, String> monitorMap = new HashMap<String, String>();
+			HashMap<String, String> chartValues=new HashMap<String, String>();
+			final DataService source = new DataService();
+			source.DataSourceType =  DataSourceType.REST;
+			Date currentDateLessOneHour = new Date(System.currentTimeMillis() - 3600 * 1000);
+			DateFormat df = new SimpleDateFormat("dd-MMM-yy HH:mm:ss");
+			try {
+				if(endDate==null && startDate==null){
+					
+					startDate=df.format(currentDateLessOneHour);
+				
+
+					// Get the date today using Calendar object.
+						Date today = Calendar.getInstance().getTime();        
+						endDate = df.format(today);
+				
+				}else if (startDate==null && endDate!=null) {
+					startDate=df.format(currentDateLessOneHour);
+				}else if(startDate!=null && endDate==null){
+
+					// Get the date today using Calendar object.
+						Date today = Calendar.getInstance().getTime();        
+						endDate = df.format(today);
+				}
+				
+				
+				// Print what date is today!			
+					Map<String, Parameter> Params = new HashMap<String, Parameter>();
+					Params.put("startDate", new Parameter("startDate",startDate ));
+					Params.put("endDate", new Parameter("endDate", endDate))	;
+					Params.put("triggerType", new Parameter("triggerType", triggerType));
+					Params.put("brandIds", new Parameter("brandIds", brandIds));
+					source.Parameters = Params;
+					source.DataSourceType =  DataSourceType.REST;
+					
+					source.ServiceUrl = Config.Current().DashBoard.Core.BaseApiUrl;
+				
+					//source.ServiceUrl = "http://localhost:9080/MainApp/rest/MainApp/getAppStatus/";
+					//http://localhost:8081/APIBase/rest/APIBase/getAppStatus/
+					WebService.Call(source, null,
+							new IServiceCallback() {
+						
+								@Override
+								public void onSuccess(String result) {
+									finalJson=result;
+								}
+			
+								@Override
+								public void onFailure(String result,DispatcherErrors errorCode) {
+									LoggingManager.logMessage("Json is Empty",org.apache.log4j.Level.ERROR );
+								}
+
+								
+			
+							});
+					///String url = new Scanner( new File("C:\\Users\\26040\\Desktop\\file.txt") ).useDelimiter("\\A").next();
+					if(finalJson!=null && finalJson!=""){
+						
+						json=mapper.readTree(finalJson);
+				
+				ArrayNode notificationStatus=(ArrayNode) json.get("notificationStatus");
+				ArrayNode pulseStatus=(ArrayNode) json.get("pulseStatus");
+				JsonNode CoreNotificationQueue= json.get("CoreNotificationQueue");
+				JsonNode ESBQueue=json.get("ESBQueue");
+				JsonNode GateKeeperQueue=json.get("GateKeeperQueue");
+				JsonNode GateKeeperQueueSlow=json.get("GateKeeperQueueSlow");
+				JsonNode XMLHigh=json.get("XMLHigh");
+				JsonNode XMLLow=json.get("XMLLow");
+				JsonNode PreProcessorQueue=json.get("PreProcessorQueue");
+				JsonNode emailBox1= json.get("1");
+				JsonNode emailBox2=json.get("2");
+				JsonNode emailBox3=json.get("3");
+				
+				 
+				
+				ArrayList<PulseLog> pulseLogList=new ArrayList<PulseLog>();
+				Timestamp lastPulse = null;
+				String ctx = "";
+				//String processTime="";
+				boolean flag=false;
+				ArrayNode chartNode = JsonNodeFactory.instance.arrayNode();
+				String availableStatus[] = Config.Current().DashBoard.Chart.Statuses;
+				
+				for(JsonNode psNode:pulseStatus){
+					PulseLog pulse=new PulseLog();
+					pulse.setContext(psNode.get("Context").toString().replace("\"", ""));
+					pulse.setIpAddress(psNode.get("IpAddress").toString().replace("\"", ""));
+					pulse.setMessage(psNode.get("Message").toString().replace("\"", ""));
+					SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS");
+				    Date parsedDate=null;
+					parsedDate = dateFormat.parse(psNode.get("pulseTime").toString().replace("\"", ""));
+				    Timestamp timestamp = new java.sql.Timestamp(parsedDate.getTime());
+					pulse.setPulseTime(timestamp);
+					pulse.setSubContext(psNode.get("SubContext").toString().replace("\"", ""));
+					pulseLogList.add(pulse);
+				}
+				
+				
+				if (pulseLogList != null) {
+
+					for (PulseLog pulseLog : pulseLogList) {
+						lastPulse = pulseLog.pulseTime;
+						//initialContext = pulseLog.Context;
+						ctx = pulseLog.Context ;
+
+							monitorMap.putAll(createMonitorMapData(lastPulse, ctx));
+					}
+				}
+
+			//	return monitorMap;
+				
+				for(JsonNode jsonNode:notificationStatus){
+					ChartObject chart=new ChartObject();
+					chart.setContext(jsonNode.get("context").toString().replace("\"", ""));
+					chart.setCount(Integer.parseInt(jsonNode.get("Count").toString()));
+					chart.setProcessTime(jsonNode.get("lastupdated").toString().replace("\"", ""));
+					chart.setStatus(jsonNode.get("Status").toString().replace("\"", ""));
+					chartDetails.add(chart);
+				}
+				
+				ArrayList<String> categories = new ArrayList<String>();
+							for (ChartObject chO : chartDetails) {
+					//processTime=chO.getProcessTime();
+					if (!categories.contains(chO.getContext())) {
+						categories.add(chO.getContext());
+					}
+		
+				}
+						//	Success,Failed,Received,sent,RemovedFromHold,Holding
+			for (int iterator = 0; iterator < availableStatus.length; iterator++) {
+
+				ObjectNode dataNode = JsonNodeFactory.instance.objectNode();
+				ArrayList<Integer> countList = new ArrayList<Integer>();
+				dataNode.put("name", availableStatus[iterator]);
+				if(availableStatus[iterator].equalsIgnoreCase("Success")){
+					dataNode.put("color", "green");
+				}else if (availableStatus[iterator].equalsIgnoreCase("Failed")) {
+					dataNode.put("color", "red");
+				}else if (availableStatus[iterator].equalsIgnoreCase("Received")) {
+					dataNode.put("color", "blue");
+				}else if (availableStatus[iterator].equalsIgnoreCase("sent")) {
+					dataNode.put("color", "Yellow");
+				}else if (availableStatus[iterator].equalsIgnoreCase("RemovedFromHold")) {
+					dataNode.put("color", "#6655AA");
+				}else if (availableStatus[iterator].equalsIgnoreCase("Holding")) {
+					dataNode.put("color", "#FF1199");
+				}
+				
+				for (String context : categories) {
+					flag = false;
+					int finalCount=0;
+					for (ChartObject chO : chartDetails) {
+
+						if (chO.getStatus().equalsIgnoreCase(
+								availableStatus[iterator])
+								&& chO.getContext().equalsIgnoreCase(context)) {
+							finalCount=finalCount+chO.getCount();
+							//countList.add(chO.getCount());
+							flag = true;
+						}
+
+					}
+					
+					if (!flag) {
+						countList.add(0);
+					}else{
+						countList.add(finalCount);
+					}
+				}
+				dataNode.put("data", countList.toString());
+				chartNode.add(dataNode);
+			}
+				
+			
+				chartValues.put("categories", categories.toString());
+				chartValues.put("series", chartNode.toString());
+				chartValues.put("coreNotificationQueue", CoreNotificationQueue.toString());
+				chartValues.put("esbQueue", ESBQueue.toString());
+				chartValues.put("gateKeeperQueue", GateKeeperQueue.toString());
+				chartValues.put("preprocessorQueue", PreProcessorQueue.toString());
+				chartValues.put("gateKeeperQueueslow", GateKeeperQueueSlow.toString());
+				chartValues.put("xmlhigh", XMLHigh.toString());
+				chartValues.put("xmlow", XMLLow.toString());
+				chartValues.put("emailBox1", emailBox1.toString().replace("\"", ""));
+				chartValues.put("emailBox2", emailBox2.toString().replace("\"", ""));
+				chartValues.put("emailBox3", emailBox3.toString().replace("\"", ""));
+				ArrayNode mapArr=JsonNodeFactory.instance.arrayNode();
+				Iterator mapItr=monitorMap.entrySet().iterator();
+			while(mapItr.hasNext()){
+				ObjectNode monitorDetails=JsonNodeFactory.instance.objectNode();
+				Map.Entry pair=(Map.Entry) mapItr.next();
+				monitorDetails.put("Context", pair.getKey().toString());
+				monitorDetails.put("Status", pair.getValue().toString());
+				mapArr.add(monitorDetails);
+			}
+				chartValues.put("monitorMap",mapArr.toString());
+				finalJson ="";
+			}
+				
+			} catch (Exception e) {
+				// TODO Auto-generated catch block
+				LoggingManager.logMessage(e.getMessage(),org.apache.log4j.Level.ERROR );
+			}
+			chartValues.put("startDate", startDate);
+			chartValues.put("endDate", endDate);
+			
+			return chartValues;
+		}
+		
+		public static HashMap<String, String> createMonitorMapData(
+				Timestamp lastPulse, String context) {
+			HashMap<String, String> monitorMap = new HashMap<String, String>();
+			long diff = (new Date().getTime() - lastPulse.getTime());
+
+			if (diff <= 5 * 60 * 1000) {
+				monitorMap.put(context, "green");
+			} else if (diff >= 5 * 60 * 1000 && diff <= 15 * 60 * 1000) {
+				monitorMap.put(context, "yellow");
+			} else {
+				monitorMap.put(context, "orange");
+			}
+			return monitorMap;
+		}
+
+		public static SampleSet getSampleSetDtls(final int trigger,final int brand, final String samplename,String screen) 
+		{
+			SampleSet sampleSet=new SampleSet();	
+			try
+			{		
+				sampleSet = (SampleSet) MyBatis.SessionFactory
+						.Get("com.dal.DashboardMapper.validSampleSetDtls", new Object() {
+							int triggerType = trigger;
+							int brandId = brand;
+							String name= samplename;
+						});
+
+			} catch (Exception e) {
+				LoggingManager.logMessage(e.getMessage(),org.apache.log4j.Level.ERROR );
+			}
+			return sampleSet;
+		}
+		
+		public static TemplateInfo getTemplateDtls(final int trigger, final int brand)
+		{
+			TemplateInfo templateInfo=new TemplateInfo();	
+			try
+			{		
+				templateInfo = (TemplateInfo) MyBatis.SessionFactory
+						.Get("com.dal.TemplateMapper.getTemplateInfo", new Object() {
+							int triggerType = trigger;
+							int brandId = brand;
+						});
+
+			} catch (Exception e) {
+				LoggingManager.logMessage(e.getMessage(),org.apache.log4j.Level.ERROR );
+			}
+			return templateInfo;
+
+		}
+		public static void updateVersionTo(int triggerType, int brandid, int samplesetid, String name) 
+		{			
+			Map param=new HashMap();
+			param.put("triggerType", triggerType);
+			param.put("brandId", brandid);
+			param.put("samplesetid", samplesetid);
+			param.put("name", name);
+			
+			try
+			{
+				MyBatis.SessionFactory.Update("com.dal.DashboardMapper.sampleset_version_update", param);			
+			}
+			catch(Exception e)
+			{
+				LoggingManager.logMessage(e.getMessage(),org.apache.log4j.Level.ERROR );
+			}
+		}
+		public static List<SampleSet> getSampleSetDtlsForManage(final int trigger,final int brand, final String samplename) 
+		{
+			List<SampleSet> lStSampleSetDtls=new ArrayList<SampleSet>();	
+			try
+			{		
+				lStSampleSetDtls = (ArrayList<SampleSet>) MyBatis.SessionFactory
+						.GetList("com.dal.DashboardMapper.validSampleSetDtlsForManage", new Object() {
+							int triggerType = trigger;
+							int brandId = brand;
+							String name= samplename;
+						});
+
+			} catch (Exception e) {
+				LoggingManager.logMessage(e.getMessage(),org.apache.log4j.Level.ERROR );
+			}
+			return lStSampleSetDtls;
+		}
+		public static List<SampleSet> getSampleSetNames(final int trigger,final int brand,String screen)
+		{
+			List<SampleSet> lStValidNames=new ArrayList<SampleSet>();
+			try 
+			{
+			if(screen.equalsIgnoreCase("preview")){
+				lStValidNames = (ArrayList<SampleSet>) MyBatis.SessionFactory
+						.GetList("com.dal.DashboardMapper.validSampleSetNamesForPreview", new Object() {
+							int triggerType = trigger;
+							int brandId = brand;
+						});
+			}else{
+				lStValidNames = (ArrayList<SampleSet>) MyBatis.SessionFactory
+						.GetList("com.dal.DashboardMapper.validSampleSetNames", new Object() {
+							int triggerType = trigger;
+							int brandId = brand;
+						});
+			}
+			
+				
+			
+
+			} catch (Exception e) {
+				LoggingManager.logMessage(e.getMessage(),org.apache.log4j.Level.ERROR );
+			}
+			return lStValidNames;
+		}
+		public static List<ValidBrands> getSampleSetBrand(final int trigger, String screen) 
+		{	
+			List<ValidBrands> lStValidBrands=new ArrayList<ValidBrands>();
+			try
+			{	
+				if(screen.equalsIgnoreCase("preview")){
+					lStValidBrands = (ArrayList<ValidBrands>) MyBatis.SessionFactory
+							.GetList("com.dal.DashboardMapper.validSampleSetBrandsForPreview", new Object() {
+								int triggerType = trigger;
+							});
+				}else{
+					lStValidBrands = (ArrayList<ValidBrands>) MyBatis.SessionFactory
+					.GetList("com.dal.DashboardMapper.validSampleSetBrands", new Object() {
+						int triggerType = trigger;
+					});
+				}
+			
+
+			} catch (Exception e) {
+				LoggingManager.logMessage(e.getMessage(),org.apache.log4j.Level.ERROR );
+			}
+			return lStValidBrands;
+		}
+
+		public static SampleSet getSampleSetData(final Integer Id) 
+		{
+			SampleSet sampleData=new SampleSet();
+			try
+			{	
+				sampleData = (SampleSet) MyBatis.SessionFactory.Get("com.dal.DashboardMapper.getSampleSetData", new Object() {
+							int sampleId = Id;
+						});
+
+			} catch (Exception e) {
+				LoggingManager.logMessage(e.getMessage(),org.apache.log4j.Level.ERROR );
+			}
+			return sampleData;
+		}
+
+		public static void updateJSON(final Integer id, final String json_text)
+		{
+			try
+			{
+				MyBatis.SessionFactory.Update("com.dal.DashboardMapper.json_update", new Object() {
+					int sampleId = id;
+					String json=json_text;
+				});		
+			}
+			catch(Exception e)
+			{
+				LoggingManager.logMessage(e.getMessage(),org.apache.log4j.Level.ERROR );
+			}			
+		}
+		public static ArrayList<ValidTriggerTypes> getValidSampleTriggerTypes(String value) {
+			ArrayList<ValidTriggerTypes> triggerList = new ArrayList<ValidTriggerTypes>();
+			if(value==null){
+			try {
+				triggerList = (ArrayList<ValidTriggerTypes>) MyBatis.SessionFactory
+						.GetList("com.dal.DashboardMapper.validSampleTriggerForPreview");
+
+			} catch (Exception e) {
+				LoggingManager.logMessage(e.getMessage(),org.apache.log4j.Level.ERROR );
+			}
+			}else{
+				try {
+					triggerList = (ArrayList<ValidTriggerTypes>) MyBatis.SessionFactory
+							.GetList("com.dal.DashboardMapper.validSampleTrigger");
+
+				} catch (Exception e) {
+					LoggingManager.logMessage(e.getMessage(),org.apache.log4j.Level.ERROR );
+				}
+			}
+			
+			return triggerList;
+		}
+
+		public static void deleteSample(final Integer id) 
+		{
+			try
+			{
+				MyBatis.SessionFactory.Update("com.dal.DashboardMapper.deleteSample", new Object() {
+					int sampleId = id;					
+				});		
+			}
+			catch(Exception e)
+			{
+				LoggingManager.logMessage(e.getMessage(),org.apache.log4j.Level.ERROR );
+			}
+		}
+		
+		
+		
+		
+		
+		
+	}

@@ -1,0 +1,95 @@
+<%@ page language="java" contentType="text/html; charset=ISO-8859-1"
+    pageEncoding="ISO-8859-1"%>
+    <%@ taglib prefix="form" uri="http://www.springframework.org/tags/form"%>
+<!--   <script type='text/javascript' src="resources/js/jquery-2.1.4.min.js"></script> -->
+<!--     <script type='text/javascript' src="resources/js/jquery.jqGrid.min.js"></script> -->
+<!--     <script type='text/javascript' src="resources/js/i18n/grid.locale-en.js"></script> -->
+<!--     <script type='text/javascript' src="resources/js/jquery-ui.js"></script> -->
+
+   <script type='text/javascript' src="resources/js/DatabaseMonitoring.js"></script> 
+<!--       <script type='text/javascript' src="resources/js/jquery.blockUI.js"></script> -->
+<title>Configuration</title>
+    <link rel="stylesheet" type="text/css" href="resources/css/ui.jqgrid.css">
+<!--     <link rel="stylesheet" type="text/css" href="resources/css/jquery-ui.css"> -->
+      <link rel="stylesheet" type="text/css" href="resources/css/bootstrap.min.css">
+<style type="text/css">
+#tab div
+{
+padding: 0 0 25px 0;
+}
+select
+{
+-webkit-border-radius: 5px;
+	-moz-border-radius: 5px;
+	border-radius: 4px;
+	border:2px solid black;
+    padding: 5px 10px;
+	width: 200px;
+    background: #FFFFE0;
+    color: #000;
+    margin-right:100px;  
+   
+}
+    .ui-jqgrid tr.jqgrow td {
+        word-wrap: break-word; /* IE 5.5+ and CSS3 */
+        white-space: pre-wrap; /* CSS3 */
+        white-space: -moz-pre-wrap; /* Mozilla, since 1999 */
+        white-space: -pre-wrap; /* Opera 4-6 */
+        white-space: -o-pre-wrap; /* Opera 7 */
+        overflow: hidden;
+        height: auto;
+        vertical-align: middle;
+        padding-top: 3px;
+        padding-bottom: 3px
+    }
+</style>  
+
+<div>
+<p><jsp:include page="Template.jsp" /></p>
+<script type="text/javascript">
+$( document ).ready(function() {
+	$("#dbMonitoringLi").addClass("active");
+	$("#tableDrop").prepend("<option value='' selected='selected'>--Select--</option>");
+});
+</script> 
+<div class="row" id="tab">
+<div class="col-lg-12">
+<h2 class="page-header">DATABASE MONITORING</h2>
+</div>
+</div>
+</div>
+<!-- <div style="background: radial-gradient(ellipse at center center , #DACCC5 0%, #A6A6A6 100%) repeat scroll 0% 0% transparent"> -->
+<form:select path="tables" items="${tables}" onchange="getTabularData(this.options[this.selectedIndex].text,'');" id="tableDrop" title="Select a Table" cssClass="dropdown" cssStyle="dropdown" />
+
+
+
+<br></br>
+<div id="tab"><p></p></div>
+<br/><br/><br/>
+  <table id="grid"></table><div id='gridpager' ></div>
+  <br></br>
+<div id="dialog-form" title="Create new user" hidden=true>
+  <p class="validateTips"></p>
+ <table style="width: 100%">
+ <tr >
+ <td style="width: 50%;padding: 2px">
+ Column Name:
+ </td>
+ <td style="padding: 2px">
+  <input type="text" id="columnValue" disabled="disabled" width="100%">
+ 
+ </td>
+ </tr>
+ <tr >
+ <td style="width: 50%;padding: 2px" >
+  Value:
+ </td>
+  <td id="valueData" style="width: 50%;padding: 2px">
+
+ </td>
+ </tr>
+ </table>
+
+</div>
+</body>
+</html> 

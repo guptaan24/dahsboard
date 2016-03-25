@@ -1,0 +1,416 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" 
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.dal.DashboardMapper">
+
+
+	<select useCache="false" id="getUserRole" parameterType="Object"
+		resultType="java.lang.String">
+		select role from userroles where userid=#{userrole}
+	</select>
+	
+	<select useCache="false" id="isUser" parameterType="Object"
+		resultType="java.lang.String">
+		select 1 from userroles where userid=#{userrole}
+	</select>
+	
+	<select useCache="false" id="getAllTables" resultType="java.lang.String">
+		SELECT
+		table_name FROM user_tables where table_name not like '%LOG%' and
+		table_name not like '%EXECUTION%' and table_name !='USERROLES' order
+		by table_name asc
+	</select>
+	<select useCache="false" id="getValidValues" resultType="java.lang.String">
+		select
+		rtrim(xmlagg(xmlelement(e, ${column} || ':'||
+		${column}||';')).extract('//text()').extract('//text()') ,',') valid
+		from ${table}
+	</select>
+	<select useCache="false" id="getValidValuesBrand" resultType="java.lang.String">
+		select
+		rtrim(xmlagg(xmlelement(e, BRANDID || ':'||
+		description||';')).extract('//text()').extract('//text()') ,',') valid
+		from validbrands
+	</select>
+	<select useCache="false" id="getValidValuesTriggers" resultType="java.lang.String">
+		select
+		rtrim(xmlagg(xmlelement(e, triggertype || ':'||
+		REPLACE(description,':','-')||';')).extract('//text()').extract('//text()') ,',') valid
+		from validtriggertypes
+	</select>
+	<select useCache="false" id="getAllColumns" parameterType="java.lang.String"
+		resultType="com.cnp.datamodels.TableModel">
+		select COLUMN_NAME as columnName,data_type as columnType
+		from ALL_TAB_COLUMNS where TABLE_NAME='${table}'
+	</select>
+	<select useCache="false" id="getAllRows" resultType="java.util.Map">
+		select *
+		from ${table}
+	</select>
+
+	<insert id="insertinto-Configuration" parameterType="com.cnp.datamodels.TableManipulation">
+
+		insert into ${tableName}
+
+		<foreach item="id" index="index" collection="keyValue" open="("
+			separator="," close=")">
+			${id.key}
+		</foreach>
+		values
+		<foreach item="id" index="index" collection="keyValue" open="("
+			separator="," close=")">
+			${id.value}
+		</foreach>
+	</insert>
+
+
+	<update id="update-Configuration" parameterType="com.cnp.datamodels.TableManipulation">
+		UPDATE ${tableName} 
+		<set>
+
+			<foreach item="id" index="index" collection="keyValue">
+				<if test="updateColumn==id.key">
+					${id.key} = ${id.value}
+				</if>
+			</foreach>
+		</set>
+		WHERE
+
+		<foreach item="id" index="index" collection="keyValue" open=""
+			separator="and" close="">
+			<if test="updateColumn!=id.key">
+			<if test="id.value==null">
+				${id.key} is null
+			</if>
+			<if test="id.value!=null">
+				${id.key} = ${id.value}
+			</if>
+			</if>
+		</foreach>
+	</update>
+	<delete id="deleteFrom-Configuration" parameterType="com.cnp.datamodels.TableManipulation">
+		delete from ${tableName} where
+		<foreach item="id" index="index" collection="keyValue" open=""
+			separator="and" close="">
+			${id.key} = ${id.value}
+		</foreach>
+	</delete>
+
+	<select useCache="false" id="getApplicationDetails"
+		parameterType="Object" resultType="com.cnp.datamodels.ApplicationMonitorLog">
+		select * from ApplicationMonitorLog where PROCESSTIME = (select
+		max(PROCESSTIME) from ApplicationMonitorLog)
+	</select>
+	<select useCache="false" id="getAppnotifBrand2" parameterType="Object"
+		resultType="com.cnp.datamodels.ApplicationNotificationLog">
+		select * from ApplicationNotificationLog where PROCESSTIME
+		= (select max(PROCESSTIME) from ApplicationNotificationLog)
+	</select>
+
+
+	<select useCache="false" id="getAllRoles" parameterType="Object"
+		resultType="com.cnp.datamodels.ValidRoles">
+		select * from VALIDROLES
+	</select>
+	<select useCache="false" id="getUserId" parameterType="Object"
+		resultType="com.cnp.datamodels.UserRoles">
+		select * from USERROLES
+	</select>
+
+	<!-- preview queries -->
+	<select useCache="false" id="validBrands" parameterType="Object"
+		resultType="com.cnp.datamodels.ValidBrands">
+	select * from VALIDBRANDS where brandid!=0
+	</select>
+
+	<select useCache="false" id="validTriggerTypes" parameterType="Object"
+		resultType="com.cnp.datamodels.ValidTriggerTypes">
+		select * from VALIDTRIGGERTYPES where triggertype!=0 order by Triggertype
+	</select>
+
+	<select useCache="false" id="select_InputJson" parameterType="Object"
+		resultType="com.cnp.datamodels.TriggerLogModel">
+		select distinct * from triggerlog where brandid=1 and triggertype=1
+	</select>
+
+	<select useCache="false" id="previewCount" parameterType="map"
+		resultType="com.cnp.datamodels.PreviewModel">
+		select * from previewdata where BRAND_ID=${brandId} and
+		TRIGGER_TYPE=${triggerType} and TEST_NAME='${testName}'
+	</select>
+
+	<update id="version_update" parameterType="com.cnp.datamodels.PreviewModel">
+		update PREVIEWDATA set version=${version} where brand_id=${brandId} and
+		trigger_type=${triggerType} and test_name='${testName}'
+	</update>
+
+	<insert id="preview_insert" parameterType="com.cnp.datamodels.PreviewModel">
+		insert into previewdata
+		(brand_id,trigger_type,version,test_name,json_input,json_output)
+		values
+		(${brandId},${triggerType},'${versionNum}','${testName}','${jsonInput}','${jsonOutput}')
+	</insert>
+
+
+	<insert id="insertinto-userroles" parameterType="com.cnp.datamodels.UserRoles">
+		insert into userroles (USERID, ROLE)
+		values (${userId}, #{role})
+	</insert>
+	<select useCache="false" id="getApplicationNotificationStatus"
+		parameterType="Object" resultType="com.cnp.datamodels.ChartObject">
+		select context,status,sum(count) as
+		count,to_char(max(processtime),'DD-MON-YY HH24:MI:SS') as processTime
+		from applicationnotificationlog where processtime=(select
+		max(processtime) from applicationnotificationlog) group by context,
+		status
+	</select>
+	<select useCache="true" flushCache="false" id="getlastUpdatedDate"
+		resultType="java.lang.String">
+		select to_char(max(processtime),'DD-MON-YY HH24:MI:SS') as lastupdated from
+		ApplicationMonitorLog
+	</select>
+	<select useCache="true" flushCache="false" id="getApplications"
+		resultType="com.cnp.datamodels.ApplicationDetails">
+		select * from ApplicationDetails
+	</select>
+
+	<select useCache="true" flushCache="false" id="getNotificationSummary"
+		resultType="com.cnp.datamodels.KeyValue">
+		select status as key,count(*) as value from triggerlog where entrydate
+		>to_timestamp('24-Aug-00 12:38:08','DD-MON-YY HH24:MI:SS') group by
+		status
+	</select>
+
+	<select useCache="true" flushCache="false"
+		id="getFilteredNotificationSummary" resultType="com.cnp.datamodels.KeyValue">
+		SELECT status AS KEY, COUNT(*) AS value FROM triggerlog WHERE brandId
+		=${brand_Id} AND triggertype=${trigger_Type} AND entrydate BETWEEN
+		to_timestamp('${StartDate}','DD-MON-YY HH24:MI:SS') AND
+		to_timestamp('${EndDate}','DD-MON-YY HH24:MI:SS')
+		GROUP BY status
+	</select>
+
+	<select useCache="true" flushCache="false" id="getFailureSummary"
+		resultType="com.cnp.datamodels.KeyValue">
+		select a.context as key,b.resolution as tablename, count(*) as value from
+		triggerlog a,notification b where a.triggerid=b.triggerid and
+		a.status='Failed' GROUP BY a.context, b.resolution order by key
+	</select>
+	<select useCache="true" flushCache="false" id="getFilteredFailureSummary"
+		resultType="com.cnp.datamodels.KeyValue">
+		select a.context as key,b.resolution as tablename, count(*) as value from
+		triggerlog a,notification b where a.triggerid=b.triggerid and
+		a.status='Failed' and a.entrydate between to_timestamp('${StartDate}','DD-MON-YY HH24:MI:SS') and 
+		to_timestamp('${EndDate}','DD-MON-YY HH24:MI:SS') and
+		a.brandid=${brand_Id} and a.triggertype=${trigger_Type} GROUP BY a.context, b.resolution order
+		by key
+	</select>
+	<select useCache="true" flushCache="false" id="getTrillerLogStatus"
+		resultType="java.lang.String">
+		select sum(count) as recieved from applicationnotificationlog where status='Success' and context='GateKeeper' and brandid=1
+	</select>
+	<select useCache="true" flushCache="false" id="getNotificationStatus"
+		resultType="java.util.HashMap">
+	    	SELECT TO_CHAR(a.success) AS success,
+  TO_CHAR(b.failure)      AS failure,
+  TO_CHAR(c.bounced)      AS bounced
+FROM
+  (SELECT COUNT(*) AS success
+  FROM notification
+  WHERE messageid  IS NOT NULL
+  AND bouncestatus IS NULL and brandid=1
+  ) a,
+  ( SELECT COUNT(*) AS failure FROM notification WHERE messageid IS NULL and brandid=1
+  ) b,
+  (SELECT COUNT(*) AS bounced
+  FROM notification
+  WHERE bouncestatus ='SoftBounce' and brandid=1
+  ) c
+	</select>
+	<select useCache="true" flushCache="false" id="getSOMSStatus"
+		resultType="java.lang.String">
+	SELECT COUNT(*) as sent FROM somsverollilog WHERE context='Sent to SOMS'
+	</select>
+		<select useCache="true" flushCache="false" id="getTrillerLogStatusFiltered"
+		resultType="java.lang.String">
+		select decode(sum(count),null,0,sum(count)) as recieved from applicationnotificationlog where status='Success' and context='GateKeeper' and processtime between to_timestamp('${StartDate}','DD-MON-YY HH24:MI:SS') and 
+		to_timestamp('${EndDate}','DD-MON-YY HH24:MI:SS') and
+		brandid=${brand_Id} and triggertype=${trigger_Type}
+	</select>
+		<select useCache="true" flushCache="false" id="getTrillerLogStatusFilteredwithoutTrigger"
+		resultType="java.lang.String">
+		select decode(sum(count),null,0,sum(count)) as recieved from applicationnotificationlog where status='Success' and context='GateKeeper' and processtime between to_timestamp('${StartDate}','DD-MON-YY HH24:MI:SS') and 
+		to_timestamp('${EndDate}','DD-MON-YY HH24:MI:SS') and
+		brandid=${brand_Id}
+	</select>
+	
+	<select useCache="true" flushCache="false" id="getNotificationStatusFiltered"
+		resultType="java.util.HashMap">
+		SELECT TO_CHAR(a.success) AS success,
+  TO_CHAR(b.failure)      AS failure,
+  TO_CHAR(c.bounced)      AS bounced
+FROM
+  (SELECT COUNT(*) AS success
+  FROM notification
+  WHERE messageid  IS NOT NULL
+  AND bouncestatus IS NULL
+   and SENTDATE between to_timestamp('${StartDate}','DD-MON-YY HH24:MI:SS') and 
+		to_timestamp('${EndDate}','DD-MON-YY HH24:MI:SS') and
+		brandid=${brand_Id} and triggertype=${trigger_Type}
+  ) a,
+  ( SELECT COUNT(*) AS failure FROM notification WHERE messageid IS NULL and SENTDATE between to_timestamp('${StartDate}','DD-MON-YY HH24:MI:SS') and 
+		to_timestamp('${EndDate}','DD-MON-YY HH24:MI:SS') and
+		brandid=${brand_Id} and triggertype=${trigger_Type}
+  ) b,
+  (SELECT COUNT(*) AS bounced
+  FROM notification
+  WHERE bouncestatus ='SoftBounce' and SENTDATE between to_timestamp('${StartDate}','DD-MON-YY HH24:MI:SS') and 
+		to_timestamp('${EndDate}','DD-MON-YY HH24:MI:SS') and
+		brandid=${brand_Id} and triggertype=${trigger_Type}
+  ) c
+	</select>
+		<select useCache="true" flushCache="false" id="getNotificationStatusFilteredwithoutTrigger"
+		resultType="java.util.HashMap">
+		SELECT TO_CHAR(a.success) AS success,
+  TO_CHAR(b.failure)      AS failure,
+  TO_CHAR(c.bounced)      AS bounced
+FROM
+  (SELECT COUNT(*) AS success
+  FROM notification
+  WHERE messageid  IS NOT NULL
+  AND bouncestatus IS NULL
+   and SENTDATE between to_timestamp('${StartDate}','DD-MON-YY HH24:MI:SS') and 
+		to_timestamp('${EndDate}','DD-MON-YY HH24:MI:SS') and
+		brandid=${brand_Id} 
+  ) a,
+  ( SELECT COUNT(*) AS failure FROM notification WHERE messageid IS NULL and SENTDATE between to_timestamp('${StartDate}','DD-MON-YY HH24:MI:SS') and 
+		to_timestamp('${EndDate}','DD-MON-YY HH24:MI:SS') and
+		brandid=${brand_Id} 
+  ) b,
+  (SELECT COUNT(*) AS bounced
+  FROM notification
+  WHERE bouncestatus ='SoftBounce' and SENTDATE between to_timestamp('${StartDate}','DD-MON-YY HH24:MI:SS') and 
+		to_timestamp('${EndDate}','DD-MON-YY HH24:MI:SS') and
+		brandid=${brand_Id} 
+  ) c
+	</select>
+	
+	
+	
+	<select useCache="true" flushCache="false" id="getSOMSStatusFiltered"
+		resultType="java.lang.String">
+	SELECT COUNT(*) as sent FROM somsverollilog WHERE context='Sent to SOMS'  and ENTRYDATE between to_timestamp('${StartDate}','DD-MON-YY HH24:MI:SS') and 
+		to_timestamp('${EndDate}','DD-MON-YY HH24:MI:SS')
+	</select>
+	
+	
+	<insert id="insert_sampleData" parameterType="com.cnp.datamodels.SampleData">
+	 insert into SAMPLEDATA(BRANDID,CULTURE,TRIGGERTYPE,NAME,DESCRIPTION,VERSIONID,CREATEDATE,JSON,ENABLED) values(${brandId},'en_US',${triggerType},'${testName}','${description}',${version},sysdate,#{json_text},0)
+	</insert>
+	<select id="alltrigger" useCache="false"  resultType="com.cnp.datamodels.SampleData">
+	select description,td.triggertype from VALIDTRIGGERTYPES vtt join TRIGGERDATA td on vtt.TRIGGERTYPE=td.TRIGGERTYPE where td.BRANDID=${brandId}
+	</select>
+	<select useCache="false" id="sampleCount" parameterType="map" resultType="com.cnp.datamodels.SampleData">
+	select * from SAMPLEDATA where BRANDID=${brandId} and TRIGGERTYPE=${triggerType} and name='${testName}'
+	</select>
+	<update id="sampleDataUpdate" parameterType="com.cnp.datamodels.SampleData">
+	update SAMPLEDATA set VERSIONID=${version},updatedate=sysdate where BRANDID=${brandId} and TRIGGERTYPE=${triggerType} and name='${testName}'
+	</update>
+	<select useCache="false" id="ajaxbrandlist"  resultType="com.cnp.datamodels.SampleData">
+	select * from triggerdata td join validbrands vb on td.brandid=vb.brandid where TRIGGERTYPE=${triggerType}
+	</select>
+	<select useCache="false" id="testname" resultType="java.lang.String">
+	 select name from sampledata where brandid=${brandId} and triggertype=${triggerType}
+	</select>
+	<select useCache="false" id="sampleversionlist" parameterType="Object" resultType="com.cnp.datamodels.Sampleversion">
+	 select versionid from SAMPLEVERSION
+	</select>
+	<insert id="insertversionsample" parameterType="com.cnp.datamodels.Sampleversion">
+	insert into sampleversion values (${versionid},'${versionname}')
+	</insert>
+	<delete id="deleteversionsample" parameterType="com.cnp.datamodels.Sampleversion">
+	delete from sampleversion where versionid=${versionid}
+	</delete>
+	<select useCache="false" id="validSampleSetBrands" parameterType="Object"
+		resultType="com.cnp.datamodels.ValidBrands">	
+		Select distinct vb.BRANDID,vb.DESCRIPTION from sampledata sd,VALIDBRANDS vb where sd.TRIGGERTYPE=${triggerType} 
+		 and sd.BRANDID=vb.BRANDID order by vb.BRANDID
+	</select>
+	
+	<select useCache="false" id="validSampleSetBrandsForPreview" parameterType="Object"
+		resultType="com.cnp.datamodels.ValidBrands">	
+		Select distinct vb.BRANDID,vb.DESCRIPTION from sampledata sd,VALIDBRANDS vb where sd.TRIGGERTYPE=${triggerType} and sd.enabled='1'
+		 and sd.BRANDID=vb.BRANDID order by vb.BRANDID
+	</select>
+	
+	<select useCache="false" id="validSampleSetNames" parameterType="Object"
+		resultType="com.staples.gnp.domain.SampleSet">	
+		Select distinct sd.NAME from sampledata sd where sd.TRIGGERTYPE=${triggerType}  and sd.BRANDID=${brandId} order by sd.NAME	
+	</select>
+	<select useCache="false" id="validSampleSetNamesForPreview" parameterType="Object"
+		resultType="com.staples.gnp.domain.SampleSet">	
+		Select sd.NAME from sampledata sd where sd.TRIGGERTYPE=${triggerType}  and sd.BRANDID=${brandId} and sd.enabled='1' order by sd.NAME		
+	</select>
+	
+	
+	<select useCache="false" id="validSampleSetDtls" parameterType="Object"
+		resultType="com.staples.gnp.domain.SampleSet">	
+		Select sd.id,sd.versionid from sampledata sd where sd.TRIGGERTYPE=${triggerType} and sd.BRANDID=${brandId} and sd.enabled='1'
+		and sd.name='${name}'  order by sd.NAME		
+	</select>
+	
+	<select useCache="false" id="validSampleSetDtlsForManage" parameterType="Object"
+		resultType="com.staples.gnp.domain.SampleSet">	
+		Select sd.id,sd.versionid,sd.enabled,sd.json from sampledata sd where sd.TRIGGERTYPE=${triggerType} and sd.BRANDID=${brandId} 
+		and sd.name='${name}'  order by sd.enabled	desc
+	</select>
+	
+	<update id="sampleset_version_update" parameterType="Object">			
+			Update sampledata
+			set enabled=
+			(
+			case when (id=${samplesetid}) then 1
+			else 0
+			end
+			)
+			where 
+			brandid=${brandId} and
+			triggertype=${triggerType} and name='${name}' 
+				
+	</update>
+	<select useCache="false" id="fourthsampleCount" parameterType="map" resultType="com.cnp.datamodels.SampleData">
+		select * from SAMPLEDATA where BRANDID=${brandId} and TRIGGERTYPE=${triggerType} and name='${testName}' and versionid=${version}
+	</select>
+	<select useCache="false" id="getSampleSetData" parameterType="Object"
+		resultType="com.staples.gnp.domain.SampleSet">				
+		select sd.id,vb.description as brandDesc, vt.description as triggerDesc, sd.name, sd.description,sd.versionid,
+		sd.json from sampledata sd,VALIDTRIGGERTYPES vt,VALIDBRANDS vb
+		where sd.id=${sampleId}
+		and vt.triggertype=sd.triggertype and vb.brandid=sd.brandid
+		  	
+	</select>
+	<update id="json_update" parameterType="Object">			
+			Update sampledata
+			set json='${json}'			
+			where 
+			id=${sampleId}	
+	</update>
+	<select useCache="false" id="validSampleTrigger" parameterType="Object"
+		resultType="com.cnp.datamodels.ValidTriggerTypes">
+		Select distinct  vt.Triggertype,vt.description  from Sampledata sd,Validtriggertypes vt 
+		where vt.Triggertype=sd.triggertype  order by vt.Triggertype
+	</select>
+	<select useCache="false" id="validSampleTriggerForPreview" parameterType="Object"
+		resultType="com.cnp.datamodels.ValidTriggerTypes">
+		Select distinct  vt.Triggertype,vt.description  from Sampledata sd,Validtriggertypes vt 
+		where vt.Triggertype=sd.triggertype and  sd.enabled='1' order by vt.Triggertype
+	</select>
+	
+	<delete id="deleteSample" parameterType="Object">
+		delete from sampledata where id=${sampleId}
+	</delete>
+	
+	
+</mapper>

@@ -1,0 +1,442 @@
+var lastsel;
+var colNames;
+var funcPerf = '';
+var tablename = ''
+var beforeUpdateId = ''
+var beforeupdatcolumn = ''
+var beforeupdatvalue = ''
+var updatedValue = ''
+var adminTables = ''
+var selectedTable = ''
+
+function saveToDb(tablename, updatedData) {
+	dialog.dialog("close");
+	var dropDownObj = document.getElementById("tableDrop")
+	if (dropDownObj == null) {
+		tablename = 'USERROLES';
+	} else {
+		tablename = dropDownObj.options[dropDownObj.selectedIndex].text
+	}
+	$.ajax({
+		type : "GET",
+		url : 'tableDetails.html',
+		data : {
+			queryData : JSON.stringify({
+				tableName : tablename,
+				tableData : updatedData,
+				func : funcPerf,
+				updatedRowId : beforeUpdateId,
+				updatedColumn : beforeupdatcolumn,
+				updatedValue : updatedValue
+			})
+		},
+		beforeSend : function() {
+			$.blockUI({
+				message : '<img src="resources/images/ajax-loader.gif" />',
+				css : {
+					width : '50%',
+					border : '0px solid #FFFFFF',
+					cursor : 'wait',
+					backgroundColor : '#FFFFFF'
+				},
+				overlayCSS : {
+					backgroundColor : '#FFFFFF',
+					opacity : 0.0,
+					cursor : 'wait'
+				}
+			});
+		},
+		complete : function() {
+			$.unblockUI();
+		},
+		success : function(data) {
+			var obj = JSON.parse(data);
+			var rowDara = JSON.parse(obj.rowData);
+
+			if (obj.status != 'Success') {
+				alert(obj.status)
+				return false;
+			}
+			creategrid(data);
+
+		}
+	});
+}
+function getTabularData(tablename, updatedData) {
+	if (tablename == '--Select--') {
+		return false;
+	}
+
+	funcPerf = '';
+
+	beforeUpdateId = ''
+	beforeupdatcolumn = ''
+	beforeupdatvalue = ''
+	updatedValue = ''
+	adminTables = ''
+	selectedTable = ''
+
+	$.ajax({
+		type : "GET",
+		url : 'tableDetails.html',
+		data : {
+			queryData : JSON.stringify({
+				tableName : tablename,
+				tableData : updatedData,
+				func : funcPerf,
+				updatedRowId : beforeUpdateId,
+				updatedColumn : beforeupdatcolumn,
+				updatedValue : updatedValue
+			})
+		},
+		beforeSend : function() {
+			$.blockUI({
+				message : '<img src="resources/images/ajax-loader.gif" />',
+				css : {
+					width : '50%',
+					border : '0px solid #FFFFFF',
+					cursor : 'wait',
+					backgroundColor : '#FFFFFF'
+				},
+				overlayCSS : {
+					backgroundColor : '#FFFFFF',
+					opacity : 0.0,
+					cursor : 'wait'
+				}
+			});
+		},
+		complete : function() {
+			$.unblockUI();
+		},
+		success : function(data) {
+			creategrid(data);
+
+		}
+	});
+
+}
+
+datePick = function(elem) {
+	jQuery(elem).datepicker();
+}
+
+function getCellValue(content) {
+	var k1 = content.indexOf(' value=', 0);
+	var k2 = content.indexOf(' name=', k1);
+	var val = '';
+	if (k1 > 0) {
+		val = content.substr(k1 + 7, k2 - k1 - 6);
+	}
+	return val;
+}
+
+function creategrid(data) {
+
+	var obj = JSON.parse(data);
+
+	colNames = obj.colNames.replace('[', '').replace(']', '').split(',');
+	adminTables = obj.adminTables.split(',')
+	var e = document.getElementById("tableDrop");
+	if (e == null) {
+		selectedTable = 'USERROLES';
+	} else {
+		selectedTable = e.options[e.selectedIndex].text;
+	}
+	var colModel = JSON.parse(obj.colModel);
+	if (obj.status == 'Failure') {
+		alert("Unable to Add row to database. Please verify the input.")
+		return false;
+	}
+	var rowDara = JSON.parse(obj.rowData);
+		var dropDownObj = document
+									.getElementById("tableDrop")
+							if (dropDownObj == null) {
+								tablename = 'USERROLES';
+							} else {
+								tablename = dropDownObj.options[dropDownObj.selectedIndex].text
+							}
+	$.jgrid.gridUnload('#grid')
+	$("#grid")
+			.jqGrid(
+					{
+						datatype : 'local',
+						mtype : 'GET',
+						colNames : colNames,
+						colModel : colModel,
+						ajaxGridOptions : {
+							contentType : 'application/json; charset=utf-8'
+						},
+						rowNum : 20,
+						rowList : [ 10, 20, 30 ],
+						loadtext : "Loading...",
+						pager : '#gridpager',
+						gridview : true,
+						altRows : true,
+						autowidth : true,
+						editUrl : 'clientArray',
+						cellsubmit : 'clientArray',
+						height : 500,
+						multiboxonly : true,
+						multiselect : true,
+						multiselectWidth : 20,
+						ondblClickRow : function(rowid, iRow, iCol) {
+						
+							if (adminTables.indexOf(tablename) == -1) {
+								var columnName = colNames[iCol - 1].trim();
+								beforeupdatcolumn = columnName;
+								funcPerf = "update";
+								$("#columnValue").attr("value", columnName);
+
+								var valueObject = colModel[iCol - 1];
+								var selectValue = '';
+								if (valueObject.edittype == 'select') {
+									selectValue = valueObject.editoptions;
+								}
+								var cellEdit = document
+										.getElementById("valueData");
+								var val = $('#grid').jqGrid('getCell', rowid,
+										columnName);
+								var element = document
+										.getElementById("updatedValue");
+								if (element != null) {
+									element.parentNode.removeChild(element);
+								}
+								if (selectValue == '') {
+									var input = '';
+									if (val.length > 50) {
+										input = document
+												.createElement("textarea");
+										input.setAttribute('style',
+												'width:100%;height:150');
+									} else {
+										input = document.createElement("input");
+										input.type = "text";
+										input.setAttribute('style',
+												'width:100%');
+									}
+									input.id = "updatedValue";
+
+									input.value = val;
+									cellEdit.appendChild(input);
+								} else {
+									var input = document
+											.createElement("select");
+									input.id = "updatedValue";
+									cellEdit.appendChild(input);
+									var vals = JSON
+											.stringify(selectValue.value)
+											.replace(/:/g, ';').replace(/"/g,
+													'').split(';');
+
+									var array = vals;
+
+									for (var i = 0; i < array.length; i++) {
+										var option = document
+												.createElement("option");
+										option.value = array[i]
+												.replace('"', '');
+										var temp=i+1;
+										option.text = array[temp].replace('"', '');
+										input.appendChild(option);
+										i=i+1;
+									}
+								}
+
+								// $("#columnUpdatedValue").attr("value",val);
+
+								$("#dialog-form").attr('title', 'My God');
+								dialog = $("#dialog-form")
+										.dialog(
+												{
+													autoOpen : true,
+													height : 300,
+													width : 600,
+													modal : true,
+													show : {
+														effect : "blind",
+														duration : 100
+													},
+													hide : {
+														effect : "explode",
+														duration : 100
+													},
+													buttons : {
+														"Save" : function() {
+															// //ggggg
+															var rowData = $(
+																	"#grid")
+																	.getRowData(
+																			rowid);
+
+															updatedValue = document
+																	.getElementById('updatedValue').value;
+															saveToDb(tablename,
+																	rowData);
+
+														},
+														Cancel : function() {
+
+															dialog
+																	.dialog("close");
+														}
+													},
+													close : function() {
+														// form[ 0 ].reset();
+														// allFields.removeClass(
+														// "ui-state-error" );
+													}
+												});
+							}
+						},
+
+						caption : tablename
+					});
+
+	if (jQuery.inArray(selectedTable, adminTables) == -1) {
+		$("#grid")
+				.jqGrid(
+						'navGrid',
+						'#gridpager',
+						{
+							cloneToTop : false,
+							view : false,
+							add : true,
+							edit : false,
+							del : true,
+							search : false
+						},
+						{},
+						{
+							url : "AddTable.html",
+							editData : {
+								tableName : function() {
+									var dropDownObj = document
+											.getElementById("tableDrop")
+									if (dropDownObj == null) {
+										tablename = 'USERROLES';
+									} else {
+										tablename = dropDownObj.options[dropDownObj.selectedIndex].text
+									}
+									return tablename;
+								}
+
+							},
+							reloadAfterSubmit : true,
+							closeAfterAdd : true,
+							afterComplete : function(response) {
+								if (response.responseText == 'Success') {
+									getTabularData(tablename, '');
+								} else {
+									alert(response.responseText);
+								}
+							}
+						},
+						{
+							url : "DeleteTable.html",
+							delData : {
+								tableName : function() {
+									var dropDownObj = document
+									.getElementById("tableDrop")
+							if (dropDownObj == null) {
+								tablename = 'USERROLES';
+							} else {
+								tablename = dropDownObj.options[dropDownObj.selectedIndex].text
+							}
+							return tablename;
+						},
+								rowData : function() {
+									var sel_id = jQuery('#grid').jqGrid(
+											'getGridParam', 'selrow');
+									var value = jQuery('#grid').jqGrid(
+											'getRowData', sel_id);
+									return JSON.stringify(value);
+								}
+							},
+							afterComplete : function(response) {
+								if (response.responseText == 'Success') {
+									getTabularData(tablename, '');
+								} else {
+									alert("Unable to Delete Data.");
+								}
+
+							}
+						});
+	}
+	// if (jQuery.inArray(selectedTable, adminTables) == -1) {
+	// $("#Add").show();
+	// $("#Delete").show();
+	// } else {
+	// $("#Add").hide();
+	// $("#Delete").hide();
+	// }
+
+	$('#grid').jqGrid('clearGridData');
+	for (var i = 0; i <= rowDara.length; i++) {
+		$("#grid").jqGrid('addRowData', i + 1, rowDara[i]);
+	}
+
+	jQuery("#grid").setGridParam({
+		rowNum : 20
+	}).trigger("reloadGrid");
+	jQuery("#grid").jqGrid('filterToolbar', {
+		stringResult : true,
+		searchOnEnter : false,
+		defaultSearch : "cn"
+	});
+
+	
+	if(tablename=='APPLICATIONDETAILS'){
+		//$("#grid").jqGrid('setColProp','URL',{width:'100px'});
+//		$('.ui-jqgrid-labels > th:eq(3)').css('width','400px')
+//		$('#grid tr').find("td:eq(3)").each(function(){$(this).css('width','400px');})
+		jQuery("#grid")
+			.navButtonAdd('#gridpager',{
+		   caption:"Clear Cache", 
+		   buttonicon:"ui-icon-add", 
+		   onClickButton: function(){ 
+			   var sel_id = jQuery('#grid')
+				.jqGrid('getGridParam',
+						'selarrrow');
+			   if(sel_id==""){
+				   alert("Please select and application.");
+				   return false;
+			   }
+			   var selectedRows=[];
+			   for(var i=0;i<sel_id.length;i++){
+				   selectedRows.push( jQuery('#grid').getRowData(sel_id[i]));
+			   
+		   }
+			   $.ajax({
+			       type  : "GET",
+			       url  : 'clearCache',
+			       dataType :'text',
+			       data : {
+						queryData :JSON.stringify(selectedRows)
+						
+					},
+					
+			     // data: "startDate=" +$('#some_class_1').val()+"&endDate="+$('#some_class_2').val(), 
+			       success: function(data) {
+			    	   updateGrid(data)
+			       },
+			error: function(data) {
+				 updateGrid(data)
+			}
+			 
+			    });
+
+			   
+			   
+			   
+		   }, 
+		   position:"last"
+		})
+	}
+}
+function updateGrid(updatedData){
+	var mydata =JSON.parse(updatedData);
+	jQuery("#grid").jqGrid('clearGridData')
+	for(var i=0;i<=mydata.length;i++){
+		jQuery("#grid").jqGrid('addRowData',i+1,mydata[i]);}
+	
+}
